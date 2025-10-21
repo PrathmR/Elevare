@@ -95,7 +95,7 @@ Codes/
 
 1. **Clone the repository**:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/PrathmR/Elevare.git
    cd Codes
    ```
 
@@ -376,4 +376,3 @@ For issues, questions, or suggestions:
 
 ---
 
-**Built with ❤️ for job seekers and freshers**
