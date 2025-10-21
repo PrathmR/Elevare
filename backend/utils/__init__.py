@@ -1,0 +1,1 @@
+from .extract_text import extract_text_from_resume
