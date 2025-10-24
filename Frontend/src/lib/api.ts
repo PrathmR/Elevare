@@ -20,6 +20,24 @@ export interface ApiError {
   error: string;
 }
 
+export interface Job {
+  title: string;
+  company: string;
+  location: string;
+  experience: string;
+  salary: string;
+  description: string;
+  url: string;
+}
+
+export interface ScrapeJobsResponse {
+  success: boolean;
+  keyword: string;
+  location: string | null;
+  jobs_count: number;
+  jobs: Job[];
+}
+
 /**
  * Upload and analyze a resume file
  */
@@ -68,6 +86,34 @@ export async function checkHealth(): Promise<{ status: string; message: string }
   
   if (!response.ok) {
     throw new Error('Backend is not responding');
+  }
+
+  return response.json();
+}
+
+/**
+ * Scrape job listings from Naukri.com
+ */
+export async function scrapeJobs(
+  keyword: string,
+  location?: string,
+  maxJobs: number = 20
+): Promise<ScrapeJobsResponse> {
+  const response = await fetch(`${API_BASE_URL}/scrape-jobs`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      keyword,
+      location: location || null,
+      max_jobs: maxJobs,
+    }),
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || 'Failed to scrape jobs');
   }
 
   return response.json();
