@@ -3,6 +3,7 @@ from flask_cors import CORS
 import os
 from utils.extract_text import extract_text_from_resume
 from ai.analyze_resume import analyze_resume
+from scraper.naukri_scraper import NaukriScraper
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -116,6 +117,48 @@ def analyze_text():
     except Exception as e:
         print(f"Error analyzing text: {str(e)}")
         return jsonify({"error": f"Error analyzing text: {str(e)}"}), 500
+
+@app.route("/api/scrape-jobs", methods=["POST"])
+def scrape_jobs():
+    """
+    Scrape job listings from Naukri.com
+    Accepts: JSON with 'keyword', optional 'location', and optional 'max_jobs'
+    Returns: JSON with scraped job listings
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'keyword' not in data:
+            return jsonify({"error": "No keyword provided"}), 400
+        
+        keyword = data['keyword']
+        location = data.get('location', None)
+        max_jobs = data.get('max_jobs', 20)
+        
+        # Validate max_jobs
+        if not isinstance(max_jobs, int) or max_jobs < 1 or max_jobs > 100:
+            return jsonify({"error": "max_jobs must be between 1 and 100"}), 400
+        
+        # Initialize scraper
+        scraper = NaukriScraper(headless=True)
+        
+        # Scrape jobs
+        if location:
+            jobs = scraper.scrape_jobs_by_location(keyword, location, max_jobs)
+        else:
+            jobs = scraper.scrape_jobs(keyword, max_jobs)
+        
+        return jsonify({
+            "success": True,
+            "keyword": keyword,
+            "location": location,
+            "jobs_count": len(jobs),
+            "jobs": jobs
+        }), 200
+        
+    except Exception as e:
+        print(f"Error scraping jobs: {str(e)}")
+        return jsonify({"error": f"Error scraping jobs: {str(e)}"}), 500
 
 @app.errorhandler(413)
 def request_entity_too_large(error):
