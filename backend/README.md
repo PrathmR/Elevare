@@ -6,6 +6,7 @@ Backend service for the Elevare AI-driven job matching platform. This service ha
 
 - 📄 **Resume Parsing**: Extract text from PDF and DOCX files
 - 🤖 **AI Analysis**: Analyze resumes using Google's Gemini AI
+- 🔍 **Job Scraping**: Scrape job listings from Naukri.com
 - 🔒 **Secure**: Environment-based configuration
 - 🚀 **RESTful API**: Clean API endpoints for frontend integration
 - ⚡ **Fast**: Optimized for quick response times
@@ -15,12 +16,14 @@ Backend service for the Elevare AI-driven job matching platform. This service ha
 - **Framework**: Flask 3.0
 - **AI Model**: Google Gemini 2.5 Flash
 - **Document Processing**: PyMuPDF, python-docx
+- **Web Scraping**: Selenium, BeautifulSoup4
 - **CORS**: Flask-CORS for cross-origin requests
 
 ## Prerequisites
 
 - Python 3.8 or higher
 - Google Gemini API key ([Get one here](https://makersuite.google.com/app/apikey))
+- Google Chrome or Chromium browser (for web scraping)
 
 ## Installation
 
@@ -130,12 +133,49 @@ Analyze resume text directly without file upload.
 }
 ```
 
+### Scrape Jobs
+```
+POST /api/scrape-jobs
+```
+Scrape job listings from Naukri.com based on keyword and optional location.
+
+**Request**:
+```json
+{
+  "keyword": "python-developer",
+  "location": "bangalore",
+  "max_jobs": 20
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "keyword": "python-developer",
+  "location": "bangalore",
+  "jobs_count": 20,
+  "jobs": [
+    {
+      "title": "Senior Python Developer",
+      "company": "Tech Corp",
+      "location": "Bangalore",
+      "experience": "3-5 years",
+      "salary": "10-15 LPA",
+      "description": "Job description...",
+      "url": "https://www.naukri.com/..."
+    }
+  ]
+}
+```
+
 ## Project Structure
 
 ```
 backend/
 ├── app.py                 # Main Flask application
 ├── requirements.txt       # Python dependencies
+├── test_scraper.py        # Test script for web scraper
 ├── .env.example          # Environment variables template
 ├── .gitignore            # Git ignore rules
 ├── README.md             # This file
@@ -145,6 +185,9 @@ backend/
 ├── ai/                   # AI modules
 │   ├── __init__.py
 │   └── analyze_resume.py # Resume analysis using Gemini AI
+├── scraper/              # Web scraping modules
+│   ├── __init__.py
+│   └── naukri_scraper.py # Naukri.com job scraper
 └── uploads/              # Temporary file uploads (gitignored)
 ```
 
@@ -193,7 +236,22 @@ curl -X POST -F "file=@path/to/resume.pdf" http://localhost:5000/api/upload-resu
 curl -X POST -H "Content-Type: application/json" \
   -d '{"text":"Your resume text"}' \
   http://localhost:5000/api/analyze-text
+
+# Scrape jobs
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"keyword":"python-developer","location":"bangalore","max_jobs":10}' \
+  http://localhost:5000/api/scrape-jobs
 ```
+
+### Testing the Web Scraper
+
+Run the test script to verify the scraper is working:
+
+```bash
+python test_scraper.py
+```
+
+This will test both basic job scraping and location-based scraping.
 
 ## Troubleshooting
 
@@ -215,6 +273,12 @@ curl -X POST -H "Content-Type: application/json" \
 4. **Import errors**
    - Activate virtual environment
    - Reinstall dependencies: `pip install -r requirements.txt`
+
+5. **Web scraping errors**
+   - Ensure Chrome/Chromium is installed
+   - Check internet connection
+   - Verify Naukri.com is accessible
+   - ChromeDriver will be auto-downloaded on first run
 
 ## Contributing
 
