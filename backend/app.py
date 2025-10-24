@@ -4,6 +4,8 @@ import os
 from utils.extract_text import extract_text_from_resume
 from ai.analyze_resume import analyze_resume
 from scraper.naukri_scraper import NaukriScraper
+from scraper.job_scraper_manager import JobScraperManager
+from utils.job_database import JobDatabase
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -159,6 +161,198 @@ def scrape_jobs():
     except Exception as e:
         print(f"Error scraping jobs: {str(e)}")
         return jsonify({"error": f"Error scraping jobs: {str(e)}"}), 500
+
+@app.route("/api/scrape-all-sources", methods=["POST"])
+def scrape_all_sources():
+    """
+    Scrape jobs from all sources (Naukri, LinkedIn, Unstop) and store in database
+    Accepts: JSON with 'keyword', optional 'location', 'max_jobs_per_source', 'sources', 'save_to_db'
+    Returns: JSON with scraped job listings
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'keyword' not in data:
+            return jsonify({"error": "No keyword provided"}), 400
+        
+        keyword = data['keyword']
+        location = data.get('location', None)
+        max_jobs_per_source = data.get('max_jobs_per_source', 10)
+        sources = data.get('sources', ['naukri', 'linkedin', 'unstop'])
+        save_to_db = data.get('save_to_db', True)
+        
+        # Validate max_jobs_per_source
+        if not isinstance(max_jobs_per_source, int) or max_jobs_per_source < 1 or max_jobs_per_source > 50:
+            return jsonify({"error": "max_jobs_per_source must be between 1 and 50"}), 400
+        
+        # Initialize scraper manager
+        scraper_manager = JobScraperManager(headless=True)
+        
+        # Scrape jobs from all sources
+        result = scraper_manager.scrape_all_sources(
+            keyword=keyword,
+            location=location,
+            max_jobs_per_source=max_jobs_per_source,
+            sources=sources
+        )
+        
+        # Save to database if requested
+        if save_to_db and result['jobs']:
+            try:
+                db = JobDatabase()
+                db_result = db.insert_jobs(result['jobs'])
+                result['database'] = db_result
+            except Exception as db_error:
+                print(f"Database error: {str(db_error)}")
+                result['database'] = {"success": False, "message": "Database not configured"}
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"Error scraping jobs: {str(e)}")
+        return jsonify({"error": f"Error scraping jobs: {str(e)}"}), 500
+
+@app.route("/api/jobs/search", methods=["GET"])
+def search_jobs():
+    """
+    Search jobs in the database
+    Query params: keyword, location, domain, source, limit
+    Returns: JSON with job listings from database
+    """
+    try:
+        keyword = request.args.get('keyword')
+        location = request.args.get('location')
+        domain = request.args.get('domain')
+        source = request.args.get('source')
+        limit = int(request.args.get('limit', 50))
+        
+        db = JobDatabase()
+        jobs = db.search_jobs(
+            keyword=keyword,
+            location=location,
+            domain=domain,
+            source=source,
+            limit=limit
+        )
+        
+        return jsonify({
+            "success": True,
+            "count": len(jobs),
+            "jobs": jobs
+        }), 200
+        
+    except Exception as e:
+        print(f"Error searching jobs: {str(e)}")
+        return jsonify({"error": f"Error searching jobs: {str(e)}"}), 500
+
+@app.route("/api/jobs/domain/<domain>", methods=["GET"])
+def get_jobs_by_domain(domain):
+    """
+    Get jobs filtered by domain
+    Returns: JSON with job listings for the specified domain
+    """
+    try:
+        limit = int(request.args.get('limit', 50))
+        
+        db = JobDatabase()
+        jobs = db.get_jobs_by_domain(domain, limit=limit)
+        
+        return jsonify({
+            "success": True,
+            "domain": domain,
+            "count": len(jobs),
+            "jobs": jobs
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting jobs by domain: {str(e)}")
+        return jsonify({"error": f"Error getting jobs by domain: {str(e)}"}), 500
+
+@app.route("/api/jobs/recent", methods=["GET"])
+def get_recent_jobs():
+    """
+    Get most recent jobs
+    Returns: JSON with recent job listings
+    """
+    try:
+        limit = int(request.args.get('limit', 20))
+        
+        db = JobDatabase()
+        jobs = db.get_recent_jobs(limit=limit)
+        
+        return jsonify({
+            "success": True,
+            "count": len(jobs),
+            "jobs": jobs
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting recent jobs: {str(e)}")
+        return jsonify({"error": f"Error getting recent jobs: {str(e)}"}), 500
+
+@app.route("/api/jobs/stats", methods=["GET"])
+def get_job_stats():
+    """
+    Get job statistics
+    Returns: JSON with job statistics
+    """
+    try:
+        db = JobDatabase()
+        stats = db.get_job_stats()
+        
+        return jsonify({
+            "success": True,
+            "stats": stats
+        }), 200
+        
+    except Exception as e:
+        print(f"Error getting job stats: {str(e)}")
+        return jsonify({"error": f"Error getting job stats: {str(e)}"}), 500
+
+@app.route("/api/scrape-and-recommend", methods=["POST"])
+def scrape_and_recommend():
+    """
+    Scrape jobs and get recommendations based on resume analysis
+    Accepts: JSON with 'resume_text' or 'resume_skills' and optional 'keyword', 'location'
+    Returns: JSON with scraped jobs and match scores
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        resume_text = data.get('resume_text', '')
+        resume_skills = data.get('resume_skills', [])
+        keyword = data.get('keyword', 'software developer')
+        location = data.get('location', None)
+        
+        # Scrape jobs
+        scraper_manager = JobScraperManager(headless=True)
+        result = scraper_manager.scrape_all_sources(
+            keyword=keyword,
+            location=location,
+            max_jobs_per_source=10
+        )
+        
+        # Simple matching logic (can be enhanced with AI)
+        if resume_skills:
+            for job in result['jobs']:
+                # Calculate match score based on skills in job description
+                job_text = f"{job.get('title', '')} {job.get('description', '')}".lower()
+                matching_skills = [skill for skill in resume_skills if skill.lower() in job_text]
+                match_score = (len(matching_skills) / len(resume_skills)) * 100 if resume_skills else 0
+                job['match_score'] = round(match_score, 2)
+                job['matching_skills'] = matching_skills
+            
+            # Sort by match score
+            result['jobs'].sort(key=lambda x: x.get('match_score', 0), reverse=True)
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"Error in scrape and recommend: {str(e)}")
+        return jsonify({"error": f"Error: {str(e)}"}), 500
 
 @app.errorhandler(413)
 def request_entity_too_large(error):

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,15 +10,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, MapPin, Briefcase, Clock, LogOut } from "lucide-react";
+import { Search, MapPin, Briefcase, Clock, LogOut, Loader2, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { searchJobs, scrapeAllSources, getRecentJobs, Job } from "@/lib/api";
 
 const Jobs = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialSearch = searchParams.get("search") || "";
   const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [scraping, setScraping] = useState(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -26,50 +30,113 @@ const Jobs = () => {
     navigate("/");
   };
 
-  // Mock job data - will be replaced with real data later
-  const mockJobs = [
-    {
-      id: "1",
-      title: "Senior Frontend Developer",
-      company: "TechCorp Inc.",
-      location: "San Francisco, CA",
-      type: "Full-time",
-      salary: "$120k - $180k",
-      postedAt: "2 days ago",
-      description:
-        "Looking for an experienced frontend developer with React expertise",
-    },
-    {
-      id: "2",
-      title: "UX Designer",
-      company: "Design Studio",
-      location: "Remote",
-      type: "Contract",
-      salary: "$80k - $100k",
-      postedAt: "1 week ago",
-      description: "Creative UX designer needed for innovative projects",
-    },
-    {
-      id: "3",
-      title: "Product Manager",
-      company: "StartupXYZ",
-      location: "New York, NY",
-      type: "Full-time",
-      salary: "$130k - $160k",
-      postedAt: "3 days ago",
-      description:
-        "Drive product strategy and execution for our growing platform",
-    },
-  ];
+  // Load jobs from database on mount or when domain changes
+  useEffect(() => {
+    const domain = searchParams.get("domain");
+    if (domain) {
+      loadJobsByDomain(domain);
+    } else {
+      loadJobs();
+    }
+  }, [searchParams]);
+
+  const loadJobs = async () => {
+    setLoading(true);
+    try {
+      const result = await getRecentJobs(50);
+      setJobs(result.jobs);
+    } catch (error) {
+      console.error("Error loading jobs:", error);
+      toast.error("Failed to load jobs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadJobsByDomain = async (domain: string) => {
+    setLoading(true);
+    try {
+      const { getJobsByDomain } = await import("@/lib/api");
+      const result = await getJobsByDomain(domain, 50);
+      setJobs(result.jobs);
+      toast.success(`Loaded ${result.count} jobs in ${domain} domain`);
+    } catch (error) {
+      console.error("Error loading jobs by domain:", error);
+      toast.error("Failed to load jobs for this domain");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      loadJobs();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await searchJobs(searchQuery);
+      setJobs(result.jobs);
+      
+      if (result.jobs.length === 0) {
+        toast.info("No jobs found in database. Try scraping new jobs!");
+      }
+    } catch (error) {
+      console.error("Error searching jobs:", error);
+      toast.error("Failed to search jobs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleScrapeJobs = async () => {
+    if (!searchQuery.trim()) {
+      toast.error("Please enter a search keyword");
+      return;
+    }
+
+    setScraping(true);
+    try {
+      toast.info("Scraping jobs from multiple sources... This may take a minute.");
+      
+      const result = await scrapeAllSources(
+        searchQuery,
+        undefined,
+        10,
+        ['naukri', 'linkedin', 'unstop'],
+        true
+      );
+      
+      setJobs(result.jobs);
+      
+      const sourceStats = Object.entries(result.source_stats)
+        .map(([source, count]) => `${source}: ${count}`)
+        .join(", ");
+      
+      toast.success(
+        `Scraped ${result.total_jobs} jobs! (${sourceStats})`
+      );
+      
+      if (result.database?.success) {
+        toast.success(`Saved ${result.database.inserted_count} jobs to database`);
+      }
+    } catch (error) {
+      console.error("Error scraping jobs:", error);
+      toast.error("Failed to scrape jobs. Please try again.");
+    } finally {
+      setScraping(false);
+    }
+  };
 
   const filteredJobs = searchQuery
-    ? mockJobs.filter(
+    ? jobs.filter(
         (job) =>
           job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
           job.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          job.description.toLowerCase().includes(searchQuery.toLowerCase())
+          (job.description && job.description.toLowerCase().includes(searchQuery.toLowerCase()))
       )
-    : mockJobs;
+    : jobs;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
@@ -104,64 +171,149 @@ const Jobs = () => {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold mb-4">Job Opportunities</h2>
+          <p className="text-muted-foreground mb-4">
+            Search our database or scrape fresh jobs from Naukri, LinkedIn, and Unstop
+          </p>
           <div className="flex gap-2">
             <Input
               type="text"
-              placeholder="Search jobs..."
+              placeholder="Search jobs (e.g., python developer, react engineer)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               className="h-12"
             />
-            <Button variant="hero">
-              <Search className="h-5 w-5" />
+            <Button 
+              variant="hero" 
+              onClick={handleSearch}
+              disabled={loading || scraping}
+            >
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Search className="h-5 w-5" />
+              )}
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={handleScrapeJobs}
+              disabled={loading || scraping || !searchQuery.trim()}
+            >
+              {scraping ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Scraping...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-5 w-5 mr-2" />
+                  Scrape Fresh Jobs
+                </>
+              )}
             </Button>
           </div>
         </div>
 
         <div className="space-y-4">
-          {filteredJobs.map((job) => (
-            <Card
-              key={job.id}
-              className="hover:shadow-lg transition-all duration-300 cursor-pointer"
-              onClick={() => navigate(`/job/${job.id}`)}
-            >
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="text-xl mb-2">{job.title}</CardTitle>
-                    <CardDescription className="text-base">
-                      {job.company}
-                    </CardDescription>
-                  </div>
-                  <Badge variant="secondary">{job.type}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground mb-4">{job.description}</p>
-                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    {job.location}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Briefcase className="h-4 w-4" />
-                    {job.salary}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-4 w-4" />
-                    {job.postedAt}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-
-          {filteredJobs.length === 0 && (
+          {loading && jobs.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
-                <p className="text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading jobs...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            filteredJobs.map((job, index) => (
+              <Card
+                key={job.id || index}
+                className="hover:shadow-lg transition-all duration-300 cursor-pointer"
+                onClick={() => job.url && job.url !== 'N/A' && window.open(job.url, '_blank')}
+              >
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-xl mb-2">{job.title}</CardTitle>
+                      <CardDescription className="text-base">
+                        {job.company}
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      {job.source && (
+                        <Badge variant="secondary">{job.source}</Badge>
+                      )}
+                      {job.match_score !== undefined && (
+                        <Badge variant="default">
+                          {job.match_score}% Match
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground mb-4">
+                    {job.description || 'No description available'}
+                  </p>
+                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                    {job.location && job.location !== 'N/A' && (
+                      <div className="flex items-center gap-1">
+                        <MapPin className="h-4 w-4" />
+                        {job.location}
+                      </div>
+                    )}
+                    {job.experience && job.experience !== 'N/A' && (
+                      <div className="flex items-center gap-1">
+                        <Briefcase className="h-4 w-4" />
+                        {job.experience}
+                      </div>
+                    )}
+                    {job.salary && job.salary !== 'N/A' && (
+                      <div className="flex items-center gap-1">
+                        <Briefcase className="h-4 w-4" />
+                        {job.salary}
+                      </div>
+                    )}
+                    {job.created_at && (
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        {new Date(job.created_at).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                  {job.matching_skills && job.matching_skills.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {job.matching_skills.map((skill, idx) => (
+                        <Badge key={idx} variant="outline" className="text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))
+          )}
+
+          {!loading && filteredJobs.length === 0 && (
+            <Card>
+              <CardContent className="text-center py-12">
+                <p className="text-muted-foreground mb-4">
                   No jobs found matching your search.
                 </p>
+                {searchQuery && (
+                  <Button onClick={handleScrapeJobs} disabled={scraping}>
+                    {scraping ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Scraping...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Scrape Jobs for "{searchQuery}"
+                      </>
+                    )}
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}

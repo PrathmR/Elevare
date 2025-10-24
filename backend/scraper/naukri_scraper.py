@@ -133,7 +133,8 @@ class NaukriScraper:
                         'experience': experience,
                         'salary': salary,
                         'description': description,
-                        'url': job_url
+                        'url': job_url,
+                        'source': 'Naukri'
                     }
                     
                     jobs_data.append(job_data)
@@ -224,7 +225,8 @@ class NaukriScraper:
                         'experience': experience,
                         'salary': salary,
                         'description': description,
-                        'url': job_url
+                        'url': job_url,
+                        'source': 'Naukri'
                     }
                     
                     jobs_data.append(job_data)

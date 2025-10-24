@@ -21,6 +21,7 @@ export interface ApiError {
 }
 
 export interface Job {
+  id?: string;
   title: string;
   company: string;
   location: string;
@@ -28,6 +29,13 @@ export interface Job {
   salary: string;
   description: string;
   url: string;
+  source?: string;
+  domain?: string;
+  keyword?: string;
+  scraped_at?: string;
+  created_at?: string;
+  match_score?: number;
+  matching_skills?: string[];
 }
 
 export interface ScrapeJobsResponse {
@@ -36,6 +44,36 @@ export interface ScrapeJobsResponse {
   location: string | null;
   jobs_count: number;
   jobs: Job[];
+}
+
+export interface ScrapeAllSourcesResponse {
+  success: boolean;
+  keyword: string;
+  location: string | null;
+  total_jobs: number;
+  jobs: Job[];
+  source_stats: Record<string, number>;
+  errors?: Record<string, string>;
+  scraped_at: string;
+  database?: {
+    success: boolean;
+    inserted_count?: number;
+    message: string;
+  };
+}
+
+export interface JobSearchResponse {
+  success: boolean;
+  count: number;
+  jobs: Job[];
+}
+
+export interface JobStatsResponse {
+  success: boolean;
+  stats: {
+    total_jobs: number;
+    jobs_by_source: Record<string, number>;
+  };
 }
 
 /**
@@ -114,6 +152,140 @@ export async function scrapeJobs(
   if (!response.ok) {
     const error: ApiError = await response.json();
     throw new Error(error.error || 'Failed to scrape jobs');
+  }
+
+  return response.json();
+}
+
+/**
+ * Scrape jobs from all sources (Naukri, LinkedIn, Unstop) and save to database
+ */
+export async function scrapeAllSources(
+  keyword: string,
+  location?: string,
+  maxJobsPerSource: number = 10,
+  sources: string[] = ['naukri', 'linkedin', 'unstop'],
+  saveToDb: boolean = true
+): Promise<ScrapeAllSourcesResponse> {
+  const response = await fetch(`${API_BASE_URL}/scrape-all-sources`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      keyword,
+      location: location || null,
+      max_jobs_per_source: maxJobsPerSource,
+      sources,
+      save_to_db: saveToDb,
+    }),
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || 'Failed to scrape jobs from all sources');
+  }
+
+  return response.json();
+}
+
+/**
+ * Search jobs in the database
+ */
+export async function searchJobs(
+  keyword?: string,
+  location?: string,
+  domain?: string,
+  source?: string,
+  limit: number = 50
+): Promise<JobSearchResponse> {
+  const params = new URLSearchParams();
+  if (keyword) params.append('keyword', keyword);
+  if (location) params.append('location', location);
+  if (domain) params.append('domain', domain);
+  if (source) params.append('source', source);
+  params.append('limit', limit.toString());
+
+  const response = await fetch(`${API_BASE_URL}/jobs/search?${params.toString()}`);
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || 'Failed to search jobs');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get jobs by domain
+ */
+export async function getJobsByDomain(
+  domain: string,
+  limit: number = 50
+): Promise<JobSearchResponse> {
+  const response = await fetch(`${API_BASE_URL}/jobs/domain/${domain}?limit=${limit}`);
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || 'Failed to get jobs by domain');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get recent jobs
+ */
+export async function getRecentJobs(limit: number = 20): Promise<JobSearchResponse> {
+  const response = await fetch(`${API_BASE_URL}/jobs/recent?limit=${limit}`);
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || 'Failed to get recent jobs');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get job statistics
+ */
+export async function getJobStats(): Promise<JobStatsResponse> {
+  const response = await fetch(`${API_BASE_URL}/jobs/stats`);
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || 'Failed to get job stats');
+  }
+
+  return response.json();
+}
+
+/**
+ * Scrape jobs and get recommendations based on resume
+ */
+export async function scrapeAndRecommend(
+  resumeText?: string,
+  resumeSkills?: string[],
+  keyword: string = 'software developer',
+  location?: string
+): Promise<ScrapeAllSourcesResponse> {
+  const response = await fetch(`${API_BASE_URL}/scrape-and-recommend`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      resume_text: resumeText,
+      resume_skills: resumeSkills,
+      keyword,
+      location: location || null,
+    }),
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || 'Failed to get job recommendations');
   }
 
   return response.json();

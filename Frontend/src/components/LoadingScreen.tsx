@@ -72,22 +72,23 @@ const LoadingScreen = ({ onLoadingComplete }: { onLoadingComplete: () => void })
           />
           
           {/* Logo container */}
-          <div className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 shadow-2xl border border-blue-500/20">
-            <motion.div
-              animate={{
-                rotateY: [0, 360],
-              }}
-              transition={{
-                duration: 3,
-                repeat: Infinity,
-                ease: "linear",
-              }}
+          <motion.div 
+            className="relative bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 shadow-2xl border border-blue-500/20"
+            animate={{
+              scale: [1, 1.05, 1],
+            }}
+            transition={{
+              duration: 1.5,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+          >
+            <div
               className="text-6xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent"
-              style={{ perspective: 1000 }}
             >
               Elevare
-            </motion.div>
-          </div>
+            </div>
+          </motion.div>
         </motion.div>
 
         {/* Tagline */}

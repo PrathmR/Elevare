@@ -8,12 +8,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { LogOut, Upload, FileText, Sparkles, Loader2 } from "lucide-react";
+import { LogOut, Upload, FileText, Sparkles, Loader2, Briefcase } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { uploadResume } from "@/lib/api";
+import { uploadResume, scrapeAndRecommend } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 
 const UploadResume = () => {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ const UploadResume = () => {
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [extractedText, setExtractedText] = useState<string>("");
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -49,6 +52,7 @@ const UploadResume = () => {
       if (result.success) {
         toast.success("Resume analyzed successfully!");
         setAnalysis(result.analysis);
+        setExtractedText(result.extracted_text);
         setShowAnalysis(true);
         
         // Store analysis in localStorage for later use
@@ -66,6 +70,41 @@ const UploadResume = () => {
   const handleViewJobs = () => {
     setShowAnalysis(false);
     navigate("/jobs?ai=true");
+  };
+
+  const handleGetRecommendations = async () => {
+    if (!extractedText) {
+      toast.error("No resume data available");
+      return;
+    }
+
+    setLoadingRecommendations(true);
+    try {
+      toast.info("Finding matching jobs... This may take a minute.");
+      
+      // Extract skills from analysis (simple approach)
+      const skillsMatch = analysis?.match(/Skills?:?\s*([^\n]+)/i);
+      const skills = skillsMatch ? skillsMatch[1].split(',').map(s => s.trim()) : [];
+      
+      const result = await scrapeAndRecommend(
+        extractedText,
+        skills,
+        "software developer", // Default keyword, can be made dynamic
+        undefined
+      );
+      
+      // Store recommendations and navigate to jobs page
+      localStorage.setItem('recommendedJobs', JSON.stringify(result.jobs));
+      toast.success(`Found ${result.total_jobs} matching jobs!`);
+      
+      setShowAnalysis(false);
+      navigate("/jobs?recommended=true");
+    } catch (error) {
+      console.error("Error getting recommendations:", error);
+      toast.error("Failed to get job recommendations");
+    } finally {
+      setLoadingRecommendations(false);
+    }
   };
 
   return (
@@ -243,8 +282,25 @@ const UploadResume = () => {
             <Button variant="outline" onClick={() => setShowAnalysis(false)}>
               Close
             </Button>
+            <Button 
+              variant="secondary" 
+              onClick={handleGetRecommendations}
+              disabled={loadingRecommendations}
+            >
+              {loadingRecommendations ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Finding Jobs...
+                </>
+              ) : (
+                <>
+                  <Briefcase className="mr-2 h-4 w-4" />
+                  Get Job Recommendations
+                </>
+              )}
+            </Button>
             <Button onClick={handleViewJobs}>
-              View Recommended Jobs
+              Browse All Jobs
             </Button>
           </div>
         </DialogContent>
