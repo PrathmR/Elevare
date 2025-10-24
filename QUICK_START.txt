@@ -1,0 +1,154 @@
+╔══════════════════════════════════════════════════════════════════════════╗
+║                   ELEVARE - QUICK START GUIDE                            ║
+║              Multi-Source Job Scraping Platform                          ║
+╚══════════════════════════════════════════════════════════════════════════╝
+
+🎯 WHAT YOU HAVE NOW:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Web scrapers for Naukri, LinkedIn, and Unstop
+✅ Database storage with Supabase
+✅ Search functionality across all jobs
+✅ Domain-wise job filtering
+✅ AI-powered job recommendations
+✅ Resume analysis with skill matching
+
+📋 SETUP STEPS (5 MINUTES):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 1: Install Backend Dependencies
+────────────────────────────────────
+cd backend
+pip install -r requirements.txt
+
+STEP 2: Install Chrome Browser
+────────────────────────────────────
+Download from: https://www.google.com/chrome/
+
+STEP 3: Set Up Supabase Database
+────────────────────────────────────
+1. Go to https://supabase.com
+2. Open your project (or create new)
+3. Go to SQL Editor
+4. Copy & paste contents from: database/schema.sql
+5. Click "Run"
+6. Go to Settings → API
+7. Copy: Project URL and Service Role Key
+
+STEP 4: Configure Backend Environment
+────────────────────────────────────
+Edit backend/.env (create if doesn't exist):
+
+GOOGLE_API_KEY=your_gemini_api_key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_KEY=your_service_role_key_here
+
+STEP 5: Start Services
+────────────────────────────────────
+Terminal 1 - Backend:
+cd backend
+python app.py
+
+Terminal 2 - Frontend:
+cd Frontend
+npm run dev
+
+🚀 YOU'RE READY! Open: http://localhost:5173
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 HOW TO USE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1️⃣ SEARCH JOBS
+   → Go to Jobs page
+   → Enter keyword (e.g., "python developer")
+   → Click Search button
+   → See results from database
+
+2️⃣ SCRAPE FRESH JOBS
+   → Enter keyword in Jobs page
+   → Click "Scrape Fresh Jobs" button
+   → Wait ~30-45 seconds
+   → Jobs from Naukri, LinkedIn, Unstop appear
+   → Automatically saved to database
+
+3️⃣ BROWSE BY DOMAIN
+   → Go to Domains page
+   → See real job counts
+   → Click any domain (Tech, Design, etc.)
+   → View filtered jobs
+
+4️⃣ GET AI RECOMMENDATIONS
+   → Go to Upload Resume page
+   → Upload your resume (PDF/DOC/DOCX)
+   → Wait for AI analysis
+   → Click "Get Job Recommendations"
+   → See matched jobs with scores
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 TEST THE SYSTEM:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Test Scraper (Backend):
+cd backend
+python test_scraper.py
+
+Test API:
+curl http://localhost:5000/api/health
+
+Test Scraping:
+curl -X POST http://localhost:5000/api/scrape-all-sources \
+  -H "Content-Type: application/json" \
+  -d '{"keyword":"python-developer","max_jobs_per_source":5}'
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❓ TROUBLESHOOTING:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Problem: ChromeDriver not found
+Solution: It auto-downloads. Ensure internet connection.
+
+Problem: Database connection failed
+Solution: Check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env
+
+Problem: No jobs scraped
+Solution: Use hyphenated keywords like "python-developer"
+
+Problem: CORS error
+Solution: Ensure backend runs on port 5000, restart both services
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📖 COMPLETE_INTEGRATION_GUIDE.md - Full setup & usage guide
+📖 FINAL_IMPLEMENTATION_SUMMARY.md - What was implemented
+📖 QUICK_REFERENCE_SCRAPING.md - Quick commands
+📖 database/schema.sql - Database schema
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 SUCCESS CHECKLIST:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+□ Backend starts without errors
+□ Frontend opens at localhost:5173
+□ Can search jobs in database
+□ Can scrape fresh jobs from all sources
+□ Jobs appear with source badges (Naukri/LinkedIn/Unstop)
+□ Can filter by domain
+□ Can upload resume and get analysis
+□ Can get job recommendations with match scores
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎊 YOU'RE ALL SET!
+
+Your job scraping platform is ready to help users find their dream jobs!
+
+For detailed documentation, see: COMPLETE_INTEGRATION_GUIDE.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
