@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Search, Upload, Briefcase, LogOut, Menu } from "lucide-react";
 import { toast } from "sonner";
+import { startBackgroundScraping } from "@/lib/api";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     checkUser();
+    initializeJobDatabase();
   }, []);
 
   const checkUser = async () => {
@@ -27,6 +29,25 @@ const Dashboard = () => {
     } = await supabase.auth.getUser();
     if (!user) {
       navigate("/auth");
+    }
+  };
+
+  const initializeJobDatabase = async () => {
+    // Check if we've scraped jobs in this session
+    const lastScrape = localStorage.getItem('lastBackgroundScrape');
+    const now = Date.now();
+    
+    // Only scrape if we haven't scraped in the last 24 hours
+    if (!lastScrape || now - parseInt(lastScrape) > 24 * 60 * 60 * 1000) {
+      try {
+        console.log('🚀 Starting background job scraping...');
+        await startBackgroundScraping(undefined, 5, true);
+        localStorage.setItem('lastBackgroundScrape', now.toString());
+        console.log('✅ Background scraping initiated');
+      } catch (error) {
+        console.error('Background scraping error:', error);
+        // Don't show error to user - this is a background operation
+      }
     }
   };
 
