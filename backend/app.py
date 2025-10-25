@@ -3,9 +3,11 @@ from flask_cors import CORS
 import os
 from utils.extract_text import extract_text_from_resume
 from ai.analyze_resume import analyze_resume
+from ai.extract_candidate_info import extract_candidate_info
 from scraper.naukri_scraper import NaukriScraper
 from scraper.job_scraper_manager import JobScraperManager
 from utils.job_database import JobDatabase
+from utils.background_scraper import BackgroundJobScraper
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -41,9 +43,9 @@ def health_check():
 @app.route("/api/upload-resume", methods=["POST"])
 def upload_resume():
     """
-    Upload and analyze resume endpoint
+    Upload and analyze resume endpoint - NOW RETURNS SIMPLIFIED CANDIDATE INFO
     Accepts: multipart/form-data with 'file' field
-    Returns: JSON with analysis results
+    Returns: JSON with basic candidate information
     """
     try:
         # Check if file is in request
@@ -72,9 +74,9 @@ def upload_resume():
         if resume_text == "Unsupported file format.":
             return jsonify({"error": "Unsupported file format"}), 400
         
-        # Analyze the extracted text using the AI model
-        analysis_result = analyze_resume(resume_text)
-        print(f"AI Analysis Result: {analysis_result[:200]}...")
+        # Extract basic candidate information using AI
+        candidate_info = extract_candidate_info(resume_text)
+        print(f"Candidate Info: {candidate_info}")
         
         # Clean up - optionally delete the file after processing
         # os.remove(filepath)
@@ -82,8 +84,8 @@ def upload_resume():
         return jsonify({
             "success": True,
             "filename": file.filename,
-            "analysis": analysis_result,
-            "extracted_text": resume_text[:500] + "..." if len(resume_text) > 500 else resume_text
+            "candidate_info": candidate_info,
+            "resume_text": resume_text  # Full text for matching
         }), 200
         
     except Exception as e:
@@ -312,9 +314,10 @@ def get_job_stats():
 @app.route("/api/scrape-and-recommend", methods=["POST"])
 def scrape_and_recommend():
     """
-    Scrape jobs and get recommendations based on resume analysis
-    Accepts: JSON with 'resume_text' or 'resume_skills' and optional 'keyword', 'location'
-    Returns: JSON with scraped jobs and match scores
+    Get job recommendations from DATABASE based on resume analysis
+    NO LONGER SCRAPES - uses pre-populated database
+    Accepts: JSON with 'resume_skills', 'domain', optional 'location'
+    Returns: JSON with matched jobs from database
     """
     try:
         data = request.get_json()
@@ -322,22 +325,25 @@ def scrape_and_recommend():
         if not data:
             return jsonify({"error": "No data provided"}), 400
         
-        resume_text = data.get('resume_text', '')
         resume_skills = data.get('resume_skills', [])
-        keyword = data.get('keyword', 'software developer')
+        domain = data.get('domain', None)
         location = data.get('location', None)
         
-        # Scrape jobs
-        scraper_manager = JobScraperManager(headless=True)
-        result = scraper_manager.scrape_all_sources(
+        # Get jobs from database (no scraping)
+        db = JobDatabase()
+        
+        # Search with domain as keyword if available
+        keyword = domain if domain and domain != "Not Found" else None
+        
+        jobs = db.search_jobs(
             keyword=keyword,
             location=location,
-            max_jobs_per_source=10
+            limit=100  # Get more jobs for better matching
         )
         
-        # Simple matching logic (can be enhanced with AI)
+        # Calculate match scores based on skills
         if resume_skills:
-            for job in result['jobs']:
+            for job in jobs:
                 # Calculate match score based on skills in job description
                 job_text = f"{job.get('title', '')} {job.get('description', '')}".lower()
                 matching_skills = [skill for skill in resume_skills if skill.lower() in job_text]
@@ -345,13 +351,72 @@ def scrape_and_recommend():
                 job['match_score'] = round(match_score, 2)
                 job['matching_skills'] = matching_skills
             
-            # Sort by match score
-            result['jobs'].sort(key=lambda x: x.get('match_score', 0), reverse=True)
+            # Sort by match score and filter jobs with at least some match
+            jobs = [job for job in jobs if job.get('match_score', 0) > 0]
+            jobs.sort(key=lambda x: x.get('match_score', 0), reverse=True)
+            
+            # Limit to top 50 matches
+            jobs = jobs[:50]
         
-        return jsonify(result), 200
+        return jsonify({
+            "success": True,
+            "total_jobs": len(jobs),
+            "jobs": jobs,
+            "source": "database"
+        }), 200
         
     except Exception as e:
         print(f"Error in scrape and recommend: {str(e)}")
+        return jsonify({"error": f"Error: {str(e)}"}), 500
+
+@app.route("/api/scrape-background", methods=["POST"])
+def scrape_background():
+    """
+    Start background job scraping to populate database
+    Accepts: JSON with optional 'keywords' list and 'max_jobs_per_source'
+    Returns: JSON with scraping status
+    """
+    try:
+        data = request.get_json() or {}
+        
+        keywords = data.get('keywords', None)  # None = use popular keywords
+        max_jobs_per_source = data.get('max_jobs_per_source', 5)
+        run_async = data.get('async', False)  # Run in background thread
+        
+        scraper = BackgroundJobScraper(headless=True)
+        
+        if run_async:
+            # Start scraping in background
+            scraper.scrape_async(keywords=keywords, max_jobs_per_source=max_jobs_per_source)
+            return jsonify({
+                "success": True,
+                "message": "Background scraping started",
+                "keywords_count": len(keywords) if keywords else len(scraper.POPULAR_KEYWORDS)
+            }), 202  # 202 Accepted
+        else:
+            # Run synchronously (will block)
+            if keywords:
+                results = []
+                for keyword in keywords:
+                    result = scraper.scrape_keyword(keyword, max_jobs_per_source)
+                    results.append(result)
+                
+                total_jobs = sum(r.get('total_jobs', 0) for r in results if r.get('success'))
+                total_saved = sum(r.get('database', {}).get('inserted_count', 0) for r in results)
+                
+                return jsonify({
+                    "success": True,
+                    "total_jobs_scraped": total_jobs,
+                    "total_jobs_saved": total_saved,
+                    "results": results
+                }), 200
+            else:
+                # Scrape all popular keywords
+                result = scraper.scrape_all_popular_keywords(max_jobs_per_source)
+                return jsonify(result), 200
+        
+    except Exception as e:
+        print(f"Error in background scraping: {str(e)}")
         return jsonify({"error": f"Error: {str(e)}"}), 500
 
 @app.errorhandler(413)
