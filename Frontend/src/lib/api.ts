@@ -4,11 +4,21 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
+export interface CandidateInfo {
+  name: string;
+  email: string;
+  mobile: string;
+  experience: number;
+  domain: string;
+  skills: string[];
+  error?: string;
+}
+
 export interface UploadResumeResponse {
   success: boolean;
   filename: string;
-  analysis: string;
-  extracted_text: string;
+  candidate_info: CandidateInfo;
+  resume_text: string;
 }
 
 export interface AnalyzeTextResponse {
@@ -74,6 +84,15 @@ export interface JobStatsResponse {
     total_jobs: number;
     jobs_by_source: Record<string, number>;
   };
+}
+
+export interface BackgroundScrapeResponse {
+  success: boolean;
+  message?: string;
+  keywords_count?: number;
+  total_jobs_scraped?: number;
+  total_jobs_saved?: number;
+  duration_seconds?: number;
 }
 
 /**
@@ -262,30 +281,56 @@ export async function getJobStats(): Promise<JobStatsResponse> {
 }
 
 /**
- * Scrape jobs and get recommendations based on resume
+ * Get job recommendations from database based on resume (NO SCRAPING)
  */
 export async function scrapeAndRecommend(
-  resumeText?: string,
-  resumeSkills?: string[],
-  keyword: string = 'software developer',
+  resumeSkills: string[],
+  domain?: string,
   location?: string
-): Promise<ScrapeAllSourcesResponse> {
+): Promise<JobSearchResponse> {
   const response = await fetch(`${API_BASE_URL}/scrape-and-recommend`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      resume_text: resumeText,
       resume_skills: resumeSkills,
-      keyword,
+      domain: domain || null,
       location: location || null,
     }),
   });
 
   if (!response.ok) {
     const error: ApiError = await response.json();
-    throw new Error(error.error || 'Failed to get job recommendations');
+    throw new Error(error.error || 'Failed to get recommendations');
+  }
+
+  return response.json();
+}
+
+/**
+ * Start background job scraping to populate database
+ */
+export async function startBackgroundScraping(
+  keywords?: string[],
+  maxJobsPerSource: number = 5,
+  runAsync: boolean = true
+): Promise<BackgroundScrapeResponse> {
+  const response = await fetch(`${API_BASE_URL}/scrape-background`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      keywords: keywords || null,
+      max_jobs_per_source: maxJobsPerSource,
+      async: runAsync,
+    }),
+  });
+
+  if (!response.ok) {
+    const error: ApiError = await response.json();
+    throw new Error(error.error || 'Failed to start background scraping');
   }
 
   return response.json();
