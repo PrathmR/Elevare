@@ -8,10 +8,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { LogOut, Upload, FileText, Sparkles, Loader2, Briefcase } from "lucide-react";
+import { LogOut, Upload, FileText, Sparkles, Loader2, Briefcase, User, Mail, Phone, Calendar, Target } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { uploadResume, scrapeAndRecommend } from "@/lib/api";
+import { uploadResume, scrapeAndRecommend, type CandidateInfo } from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -20,10 +20,9 @@ const UploadResume = () => {
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [analysis, setAnalysis] = useState<string | null>(null);
-  const [showAnalysis, setShowAnalysis] = useState(false);
+  const [candidateInfo, setCandidateInfo] = useState<CandidateInfo | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
-  const [extractedText, setExtractedText] = useState<string>("");
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -46,58 +45,52 @@ const UploadResume = () => {
     setUploading(true);
 
     try {
-      // Upload and analyze resume using backend API
+      // Upload and extract candidate info using backend API
       const result = await uploadResume(file);
       
       if (result.success) {
-        toast.success("Resume analyzed successfully!");
-        setAnalysis(result.analysis);
-        setExtractedText(result.extracted_text);
-        setShowAnalysis(true);
+        toast.success("Resume processed successfully!");
+        setCandidateInfo(result.candidate_info);
+        setShowInfo(true);
         
-        // Store analysis in localStorage for later use
-        localStorage.setItem('lastResumeAnalysis', result.analysis);
-        localStorage.setItem('lastResumeText', result.extracted_text);
+        // Store info in localStorage for later use
+        localStorage.setItem('lastCandidateInfo', JSON.stringify(result.candidate_info));
+        localStorage.setItem('lastResumeText', result.resume_text);
       }
     } catch (error) {
       console.error("Error uploading resume:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to analyze resume");
+      toast.error(error instanceof Error ? error.message : "Failed to process resume");
     } finally {
       setUploading(false);
     }
   };
 
   const handleViewJobs = () => {
-    setShowAnalysis(false);
+    setShowInfo(false);
     navigate("/jobs?ai=true");
   };
 
   const handleGetRecommendations = async () => {
-    if (!extractedText) {
-      toast.error("No resume data available");
+    if (!candidateInfo) {
+      toast.error("No candidate data available");
       return;
     }
 
     setLoadingRecommendations(true);
     try {
-      toast.info("Finding matching jobs... This may take a minute.");
-      
-      // Extract skills from analysis (simple approach)
-      const skillsMatch = analysis?.match(/Skills?:?\s*([^\n]+)/i);
-      const skills = skillsMatch ? skillsMatch[1].split(',').map(s => s.trim()) : [];
+      toast.info("Finding matching jobs from database...");
       
       const result = await scrapeAndRecommend(
-        extractedText,
-        skills,
-        "software developer", // Default keyword, can be made dynamic
+        candidateInfo.skills,
+        candidateInfo.domain,
         undefined
       );
       
       // Store recommendations and navigate to jobs page
       localStorage.setItem('recommendedJobs', JSON.stringify(result.jobs));
-      toast.success(`Found ${result.total_jobs} matching jobs!`);
+      toast.success(`Found ${result.count} matching jobs!`);
       
-      setShowAnalysis(false);
+      setShowInfo(false);
       navigate("/jobs?recommended=true");
     } catch (error) {
       console.error("Error getting recommendations:", error);
@@ -232,54 +225,81 @@ const UploadResume = () => {
         </div>
       </main>
 
-      {/* Analysis Results Dialog */}
-      <Dialog open={showAnalysis} onOpenChange={setShowAnalysis}>
-        <DialogContent className="max-w-4xl max-h-[80vh]">
+      {/* Candidate Info Dialog */}
+      <Dialog open={showInfo} onOpenChange={setShowInfo}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Resume Analysis Results</DialogTitle>
+            <DialogTitle>Candidate Profile</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="h-[60vh] pr-4">
-            <div className="prose prose-sm max-w-none">
-              {analysis && (
-                <div className="whitespace-pre-wrap">
-                  {analysis.split('\n').map((line, index) => {
-                    // Format markdown-style headers
-                    if (line.startsWith('**') && line.endsWith('**')) {
-                      return (
-                        <h3 key={index} className="font-bold text-lg mt-4 mb-2">
-                          {line.replace(/\*\*/g, '')}
-                        </h3>
-                      );
-                    }
-                    if (line.startsWith('# ')) {
-                      return (
-                        <h2 key={index} className="font-bold text-xl mt-4 mb-2">
-                          {line.substring(2)}
-                        </h2>
-                      );
-                    }
-                    if (line.startsWith('## ')) {
-                      return (
-                        <h3 key={index} className="font-bold text-lg mt-3 mb-2">
-                          {line.substring(3)}
-                        </h3>
-                      );
-                    }
-                    if (line.startsWith('- ')) {
-                      return (
-                        <li key={index} className="ml-4">
-                          {line.substring(2)}
-                        </li>
-                      );
-                    }
-                    return <p key={index} className="mb-2">{line}</p>;
-                  })}
+          <div className="space-y-6">
+            {candidateInfo && (
+              <>
+                {/* Basic Info */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <User className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Name</p>
+                      <p className="font-medium">{candidateInfo.name}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <Mail className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Email</p>
+                      <p className="font-medium">{candidateInfo.email}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <Phone className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Mobile</p>
+                      <p className="font-medium">{candidateInfo.mobile}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Experience</p>
+                      <p className="font-medium">
+                        {candidateInfo.experience === 0 ? 'Fresher' : `${candidateInfo.experience} years`}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <Target className="h-5 w-5 text-primary" />
+                    <div>
+                      <p className="text-sm text-muted-foreground">Domain</p>
+                      <p className="font-medium">{candidateInfo.domain}</p>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-          </ScrollArea>
+
+                {/* Skills */}
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Skills</p>
+                  <div className="flex flex-wrap gap-2">
+                    {candidateInfo.skills.length > 0 ? (
+                      candidateInfo.skills.map((skill, index) => (
+                        <Badge key={index} variant="secondary">
+                          {skill}
+                        </Badge>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No skills extracted</p>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          
           <div className="flex gap-2 justify-end mt-4">
-            <Button variant="outline" onClick={() => setShowAnalysis(false)}>
+            <Button variant="outline" onClick={() => setShowInfo(false)}>
               Close
             </Button>
             <Button 
